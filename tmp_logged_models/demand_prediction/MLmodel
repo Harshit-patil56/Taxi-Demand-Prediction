@@ -1,0 +1,56 @@
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.13.5
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.7.1
+is_signature_from_type_hint: false
+mlflow_version: 3.3.1
+model_id: null
+model_size_bytes: 1897
+model_uuid: 57224abb0da64a24974d271406ff9bc7
+prompts: null
+signature:
+  inputs: '[{"type": "double", "name": "ohe__region_1", "required": true}, {"type":
+    "double", "name": "ohe__region_2", "required": true}, {"type": "double", "name":
+    "ohe__region_3", "required": true}, {"type": "double", "name": "ohe__region_4",
+    "required": true}, {"type": "double", "name": "ohe__region_5", "required": true},
+    {"type": "double", "name": "ohe__region_6", "required": true}, {"type": "double",
+    "name": "ohe__region_7", "required": true}, {"type": "double", "name": "ohe__region_8",
+    "required": true}, {"type": "double", "name": "ohe__region_9", "required": true},
+    {"type": "double", "name": "ohe__region_10", "required": true}, {"type": "double",
+    "name": "ohe__region_11", "required": true}, {"type": "double", "name": "ohe__region_12",
+    "required": true}, {"type": "double", "name": "ohe__region_13", "required": true},
+    {"type": "double", "name": "ohe__region_14", "required": true}, {"type": "double",
+    "name": "ohe__region_15", "required": true}, {"type": "double", "name": "ohe__region_16",
+    "required": true}, {"type": "double", "name": "ohe__region_17", "required": true},
+    {"type": "double", "name": "ohe__region_18", "required": true}, {"type": "double",
+    "name": "ohe__region_19", "required": true}, {"type": "double", "name": "ohe__region_20",
+    "required": true}, {"type": "double", "name": "ohe__region_21", "required": true},
+    {"type": "double", "name": "ohe__region_22", "required": true}, {"type": "double",
+    "name": "ohe__region_23", "required": true}, {"type": "double", "name": "ohe__region_24",
+    "required": true}, {"type": "double", "name": "ohe__region_25", "required": true},
+    {"type": "double", "name": "ohe__region_26", "required": true}, {"type": "double",
+    "name": "ohe__region_27", "required": true}, {"type": "double", "name": "ohe__region_28",
+    "required": true}, {"type": "double", "name": "ohe__region_29", "required": true},
+    {"type": "double", "name": "ohe__day_of_week_1", "required": true}, {"type": "double",
+    "name": "ohe__day_of_week_2", "required": true}, {"type": "double", "name": "ohe__day_of_week_3",
+    "required": true}, {"type": "double", "name": "ohe__day_of_week_4", "required":
+    true}, {"type": "double", "name": "ohe__day_of_week_5", "required": true}, {"type":
+    "double", "name": "ohe__day_of_week_6", "required": true}, {"type": "double",
+    "name": "remainder__lag_1", "required": true}, {"type": "double", "name": "remainder__lag_2",
+    "required": true}, {"type": "double", "name": "remainder__lag_3", "required":
+    true}, {"type": "double", "name": "remainder__lag_4", "required": true}, {"type":
+    "double", "name": "remainder__avg_pickups", "required": true}]'
+  outputs: '[{"type": "tensor", "tensor-spec": {"dtype": "float64", "shape": [-1]}}]'
+  params: null
+type_hint_from_example: false
+utc_time_created: '2025-09-09 14:49:23.771349'
