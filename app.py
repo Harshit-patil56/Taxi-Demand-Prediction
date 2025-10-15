@@ -1,6 +1,4 @@
 import joblib
-import dagshub
-import mlflow
 import pandas as pd
 import streamlit as st
 from pathlib import Path
@@ -9,48 +7,56 @@ from sklearn.pipeline import Pipeline
 from sklearn import set_config
 from time import sleep
 
-
 set_config(transform_output="pandas")
 
-import dagshub
-dagshub.init(repo_owner='himanshu1703', repo_name='uber-demand-prediction', mlflow=True)
+# Cache model loading for better performance
+@st.cache_resource
+def load_models():
+    """Load all models and return them as a dictionary"""
+    # set the root path
+    root_path = Path(__file__).parent
+    
+    # model paths
+    kmeans_path = root_path / "models/mb_kmeans.joblib"
+    scaler_path = root_path / "models/scaler.joblib"
+    encoder_path = root_path / "models/encoder.joblib"
+    model_path = root_path / "models/model.joblib"
+    
+    # load the objects
+    models = {
+        'scaler': joblib.load(scaler_path),
+        'encoder': joblib.load(encoder_path),
+        'model': joblib.load(model_path),
+        'kmeans': joblib.load(kmeans_path)
+    }
+    return models
 
-# set the mlflow tracking uri
-mlflow.set_tracking_uri("https://dagshub.com/himanshu1703/uber-demand-prediction.mlflow")
+@st.cache_data
+def load_data():
+    """Load and cache the data"""
+    # set the root path
+    root_path = Path(__file__).parent
+    # path of the data
+    plot_data_path = root_path / "data/external/plot_data.csv"
+    data_path = root_path / "data/processed/test.csv"
+    
+    df_plot = pd.read_csv(plot_data_path)
+    df = pd.read_csv(data_path, parse_dates=["tpep_pickup_datetime"]).set_index("tpep_pickup_datetime")
+    return df_plot, df
 
-# get model name
-registered_model_name = 'uber_demand_prediction_model'
-stage = "Production"
-model_path = f"models:/{registered_model_name}/{stage}"
+# Load models and data
+models = load_models()
+scaler = models['scaler']
+encoder = models['encoder']
+model = models['model']
+kmeans = models['kmeans']
 
-# load the latest model from model registry
-model = mlflow.sklearn.load_model(model_path)
-
-# set the root path
-root_path = Path(__file__).parent
-# path of the data
-plot_data_path = root_path / "data/external/plot_data.csv"
-data_path = root_path / "data/processed/test.csv"
-
-# model paths
-kmeans_path = root_path / "models/mb_kmeans.joblib"
-scaler_path = root_path / "models/scaler.joblib"
-encoder_path = root_path / "models/encoder.joblib"
-model_path = root_path / "models/model.joblib"
-
-# load the objects
-scaler = joblib.load(scaler_path)
-encoder = joblib.load(encoder_path)
-model = joblib.load(model_path)
-kmeans = joblib.load(kmeans_path)
-
-# dataset to plot
-df_plot = pd.read_csv(plot_data_path)
-df = pd.read_csv(data_path, parse_dates=["tpep_pickup_datetime"]).set_index("tpep_pickup_datetime")
+# Load data
+df_plot, df = load_data()
 
 # UI of app
 # make the title for the page
-st.title("Uber Demand in New York City 🚕🌆")
+st.title("Taxi Demand in New York City 🚕🌆")
 
 # select for only neighbors or all
 st.sidebar.title("Options")

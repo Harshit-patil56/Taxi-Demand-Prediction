@@ -6,7 +6,7 @@ flavors:
     loader_module: mlflow.sklearn
     model_path: model.pkl
     predict_fn: predict
-    python_version: 3.13.5
+    python_version: 3.13.7
   sklearn:
     code: null
     pickled_model: model.pkl
@@ -16,7 +16,7 @@ is_signature_from_type_hint: false
 mlflow_version: 3.3.1
 model_id: null
 model_size_bytes: 1897
-model_uuid: 57224abb0da64a24974d271406ff9bc7
+model_uuid: fa7d032cd6674165a4b8f3a5dc2866a1
 prompts: null
 signature:
   inputs: '[{"type": "double", "name": "ohe__region_1", "required": true}, {"type":
@@ -53,4 +53,4 @@ signature:
   outputs: '[{"type": "tensor", "tensor-spec": {"dtype": "float64", "shape": [-1]}}]'
   params: null
 type_hint_from_example: false
-utc_time_created: '2025-09-09 14:49:23.771349'
+utc_time_created: '2025-10-14 13:35:14.123049'

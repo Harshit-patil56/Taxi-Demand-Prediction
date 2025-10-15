@@ -12,8 +12,8 @@ from sklearn.metrics import mean_absolute_percentage_error
 # ---------------------------
 # Init DagsHub + MLflow
 # ---------------------------
-dagshub.init(repo_owner='Shubham39275', repo_name='Taxi-Demand-Prediction', mlflow=True)
-mlflow.set_tracking_uri("https://dagshub.com/Shubham39275/Taxi_Demand_Prediction.mlflow")
+dagshub.init(repo_owner='shit192004', repo_name='Taxi-Demand-Prediction', mlflow=True)
+mlflow.set_tracking_uri("https://dagshub.com/shit192004/Taxi-Demand-Prediction.mlflow")
 mlflow.set_experiment("DVC Pipeline")
 set_config(transform_output="pandas")
 
