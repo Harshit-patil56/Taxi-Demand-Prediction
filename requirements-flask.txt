@@ -1,0 +1,8 @@
+# Flask Requirements
+Flask==3.0.0
+Werkzeug==3.0.1
+pandas
+scikit-learn==1.7.1
+joblib
+h3
+shapely
