@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NYC Taxi Demand Prediction - AI Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Leaflet Routing Machine for directions -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
+    <!-- Leaflet.heat for demand heatmap -->
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100vh;
+        }
+        #map { 
+            height: 100%; 
+            border-radius: 4px; 
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .demand-badge {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+        .dashboard-container {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 280px;
+            background: white;
+            border-right: 1px solid #e5e7eb;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        .main-content {
+            flex: 1;
+            display: flex;
+            gap: 12px;
+            padding: 12px;
+            overflow: hidden;
+            background: #f9fafb;
+        }
+        .left-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow: hidden;
+        }
+        .right-panel {
+            width: 480px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        .map-container {
+            height: 500px;
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .analytics-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            height: 220px;
+        }
+        .card {
+            background: white;
+            border-radius: 4px;
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+        }
+        .card-header {
+            font-size: 13px;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .compact-text {
+            font-size: 12px;
+            color: #6b7280;
+        }
+        .zones-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        /* Heatmap toggle button */
+        .map-control-btn {
+            position: absolute;
+            z-index: 1000;
+            background: white;
+            border: 2px solid rgba(0,0,0,0.2);
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            color: #374151;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+            transition: background 0.2s;
+        }
+        .map-control-btn:hover { background: #f3f4f6; }
+        .map-control-btn.active { background: #667eea; color: white; border-color: #667eea; }
+        #heatmapToggle { top: 10px; right: 10px; }
+        /* Hide routing machine's default panel */
+        .leaflet-routing-container { display: none !important; }
+        /* Route info panel */
+        .route-info-panel {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            border-radius: 8px;
+            padding: 10px 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+        .route-info-panel .route-details {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+        .route-info-panel .close-route {
+            cursor: pointer;
+            color: #9ca3af;
+            font-size: 16px;
+        }
+        .route-info-panel .close-route:hover { color: #ef4444; }
+        /* Region boundary highlight */
+        .region-highlight {
+            stroke: #000;
+            stroke-width: 3;
+            fill-opacity: 0.15;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="gradient-bg text-white" style="padding: 8px 16px;">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-taxi text-2xl"></i>
+            <div>
+                <h1 class="text-lg font-bold">NYC Taxi Demand Prediction</h1>
+            </div>
+        </div>
+    </header>
+
+    <!-- Dashboard Container -->
+    <div class="dashboard-container">
+        
+        <!-- Left Sidebar - Controls -->
+        <div class="sidebar">
+            <div style="padding: 16px;">
+                
+                <!-- Zone Selection -->
+                <div style="margin-bottom: 16px;">
+                    <div class="card-header">
+                        <i class="fas fa-map-marker-alt text-purple-600"></i>
+                        Select Demand Zone
+                    </div>
+                    
+                    <label style="font-size: 12px; font-weight: 500; color: #374151; display: block; margin-bottom: 6px;">Choose Zone</label>
+                    <select id="zoneSelect" class="w-full border border-gray-300 rounded" style="padding: 8px; font-size: 13px;">
+                        <option value="">-- Select a Zone --</option>
+                    </select>
+                    
+                    <div style="margin-top: 12px; text-align: center;">
+                        <p style="font-size: 11px; color: #6b7280; margin-bottom: 6px;">OR</p>
+                        <button id="clickMapBtn" class="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 rounded" style="padding: 8px; font-size: 12px; font-weight: 500;">
+                            <i class="fas fa-mouse-pointer" style="font-size: 10px;"></i> Click Map to Select
+                        </button>
+                    </div>
+                    
+                    <div id="selectedZoneInfo" class="hidden bg-purple-50 border border-purple-200 rounded" style="margin-top: 12px; padding: 8px;">
+                        <p style="font-size: 12px; font-weight: 600; color: #581c87;" id="selectedZoneName"></p>
+                        <p style="font-size: 11px; color: #6b21a8; margin-top: 4px;">Zone ID: <span id="selectedZoneId"></span></p>
+                    </div>
+                </div>
+
+                <!-- Date & Time Selection -->
+                <div style="margin-bottom: 16px;">
+                    <div class="card-header">
+                        <i class="fas fa-clock text-purple-600"></i>
+                        Select Date & Time
+                    </div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size: 12px; font-weight: 500; color: #374151; display: block; margin-bottom: 6px;">Date (March 2016)</label>
+                        <input type="date" id="datePicker" min="2016-03-01" max="2016-03-31" value="2016-03-15"
+                               class="w-full border border-gray-300 rounded" style="padding: 8px; font-size: 13px;">
+                        <div class="grid grid-cols-3 gap-2" style="margin-top: 8px;">
+                            <button onclick="document.getElementById('datePicker').value='2016-03-01'" class="bg-gray-100 hover:bg-gray-200 rounded" style="padding: 6px; font-size: 11px; font-weight: 500;">1st</button>
+                            <button onclick="document.getElementById('datePicker').value='2016-03-15'" class="bg-gray-100 hover:bg-gray-200 rounded" style="padding: 6px; font-size: 11px; font-weight: 500;">15th</button>
+                            <button onclick="document.getElementById('datePicker').value='2016-03-31'" class="bg-gray-100 hover:bg-gray-200 rounded" style="padding: 6px; font-size: 11px; font-weight: 500;">31st</button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label style="font-size: 12px; font-weight: 500; color: #374151; display: block; margin-bottom: 6px;">Time (15-min intervals)</label>
+                        <select id="timePicker" class="w-full border border-gray-300 rounded" style="padding: 8px; font-size: 13px;">
+                            <option value="">-- Select Time --</option>
+                        </select>
+                        <div class="grid grid-cols-4 gap-1" style="margin-top: 8px;">
+                            <button onclick="setTime('08:00')" class="bg-gray-100 hover:bg-gray-200 rounded" style="padding: 6px; font-size: 11px;">8AM</button>
+                            <button onclick="setTime('12:00')" class="bg-gray-100 hover:bg-gray-200 rounded" style="padding: 6px; font-size: 11px;">12PM</button>
+                            <button onclick="setTime('17:00')" class="bg-gray-100 hover:bg-gray-200 rounded" style="padding: 6px; font-size: 11px;">5PM</button>
+                            <button onclick="setTime('20:00')" class="bg-gray-100 hover:bg-gray-200 rounded" style="padding: 6px; font-size: 11px;">8PM</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <button id="predictBtn" disabled class="w-full gradient-bg text-white font-bold rounded shadow hover:shadow-lg disabled:opacity-50" style="padding: 12px; margin-bottom: 12px;">
+                    <i class="fas fa-magic" style="font-size: 12px;"></i> Predict Demand
+                </button>
+
+                <button id="viewAllBtn" class="w-full bg-white border-2 border-purple-600 text-purple-600 font-semibold rounded hover:bg-purple-50" style="padding: 10px;">
+                    <i class="fas fa-th-large" style="font-size: 12px;"></i> View All 30 Zones
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="main-content">
+            
+            <!-- Left Panel: Map + Analytics -->
+            <div class="left-panel">
+                
+                <!-- Map Container -->
+                <div class="map-container">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div class="card-header" style="margin: 0;">
+                            <i class="fas fa-map text-purple-600"></i>
+                            NYC Demand Zones
+                        </div>
+                    </div>
+                    <div style="flex: 1; overflow: hidden; position: relative;">
+                        <div id="map"></div>
+                        <button id="heatmapToggle" class="map-control-btn" onclick="toggleHeatmap()" title="Toggle demand heatmap">
+                            <i class="fas fa-fire"></i> Heatmap
+                        </button>
+                        <div id="routeInfoPanel" class="route-info-panel" style="display: none;">
+                            <div class="route-details">
+                                <div>
+                                    <i class="fas fa-route text-purple-600"></i>
+                                    <span style="font-weight: 600; margin-left: 4px;" id="routeFromTo">--</span>
+                                </div>
+                                <div style="color: #6b7280;">
+                                    <i class="fas fa-road"></i> <span id="routeDistance">--</span>
+                                </div>
+                                <div style="color: #6b7280;">
+                                    <i class="fas fa-clock"></i> <span id="routeTime">--</span>
+                                </div>
+                            </div>
+                            <span class="close-route" onclick="clearRoute()" title="Clear route">
+                                <i class="fas fa-times"></i>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Prediction Card -->
+                <div id="mainPredictionCard" class="hidden gradient-bg text-white rounded" style="padding: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div>
+                            <p style="font-size: 11px; color: rgba(255,255,255,0.8); font-weight: 500;">PREDICTED DEMAND</p>
+                            <h2 style="font-size: 48px; font-weight: 700; margin-top: 4px;" class="demand-badge" id="predictedValue">--</h2>
+                            <p style="font-size: 11px; color: rgba(255,255,255,0.9); margin-top: 4px;">for <span id="nextInterval" style="font-weight: 600;"></span></p>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <div style="background: rgba(255,255,255,0.2); border-radius: 4px; padding: 8px; text-align: center;">
+                                <p style="font-size: 10px; color: rgba(255,255,255,0.8);">Confidence</p>
+                                <p style="font-size: 18px; font-weight: 700; margin-top: 2px;" id="confidenceLevel">--</p>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.2); border-radius: 4px; padding: 8px; text-align: center;">
+                                <p style="font-size: 10px; color: rgba(255,255,255,0.8);">Trend</p>
+                                <p style="font-size: 24px; font-weight: 700; margin-top: 2px;" id="trendIcon">--</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analytics Row -->
+                <div id="analyticsRow" class="analytics-row hidden">
+                    
+                    <!-- Historical Pattern Chart -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-chart-line text-purple-600"></i>
+                            Last Hour Pattern
+                        </div>
+                        <canvas id="trendChart" height="140"></canvas>
+                    </div>
+
+                    <!-- Model Features -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-brain text-blue-600"></i>
+                            Model Features
+                        </div>
+                        <div style="font-size: 11px; display: flex; flex-direction: column; gap: 6px;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: #6b7280;">Day:</span>
+                                <span style="font-weight: 600;" id="dayOfWeek">--</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: #6b7280;">EWMA Avg:</span>
+                                <span style="font-weight: 600;" id="avgPickups">--</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: #6b7280;">Trend:</span>
+                                <span style="font-weight: 600;" id="trendStatus">--</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span style="color: #6b7280;">Zone:</span>
+                                <span style="font-weight: 600; font-size: 10px;" id="zoneInfo">--</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Accuracy -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-bullseye text-green-600"></i>
+                            Accuracy
+                        </div>
+                        <div style="font-size: 11px; display: flex; flex-direction: column; gap: 6px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280;">Predicted:</span>
+                                <span style="font-size: 18px; font-weight: 700; color: #7c3aed;" id="predictedDemand">--</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #6b7280;">Actual:</span>
+                                <span style="font-size: 18px; font-weight: 700; color: #111827;" id="actualDemand">--</span>
+                            </div>
+                            <div style="border-top: 1px solid #e5e7eb; padding-top: 6px; margin-top: 6px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="color: #6b7280;">Error:</span>
+                                    <span style="font-size: 14px; font-weight: 700; color: #dc2626;" id="errorValue">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Insights & Recommendations -->
+            <div class="right-panel">
+                <div id="resultsSection" class="hidden" style="display: flex; flex-direction: column; gap: 12px;">
+                    
+                    <!-- Zones Comparison Row -->
+                    <div class="zones-grid">
+                        <!-- Top 5 High Demand Zones -->
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-fire text-red-600"></i>
+                                Top 5 High Demand
+                            </div>
+                            <div id="topZonesList" style="display: flex; flex-direction: column; gap: 8px;">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+
+                        <!-- Where to Move Next -->
+                        <div class="card">
+                            <div class="card-header">
+                                <i class="fas fa-route text-purple-600"></i>
+                                Where to Move Next
+                            </div>
+                            <div id="recommendationsList" style="display: flex; flex-direction: column; gap: 8px;">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Driver Recommendation -->
+                    <div style="background: linear-gradient(to right, #f0fdf4, #dbeafe); border: 2px solid #86efac; border-radius: 4px; padding: 12px;">
+                        <div style="display: flex; gap: 12px;">
+                            <div style="background: #10b981; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <i class="fas fa-lightbulb text-white" style="font-size: 14px;"></i>
+                            </div>
+                            <div>
+                                <h3 style="font-size: 13px; font-weight: 700; color: #111827; margin-bottom: 4px;">Driver Recommendation</h3>
+                                <p style="font-size: 12px; color: #374151;" id="recommendationText">--</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Peak Hours Today -->
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-chart-line text-orange-600"></i>
+                            Peak Hours Today
+                        </div>
+                        <div style="background: linear-gradient(to right, #fff7ed, #fef3c7); border: 2px solid #fb923c; border-radius: 4px; padding: 12px; margin-top: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <p style="font-size: 11px; color: #9a3412; font-weight: 600;">BEST TIME IN THIS ZONE</p>
+                                    <p style="font-size: 24px; font-weight: 700; color: #ea580c; margin-top: 4px;" id="peakTime">--</p>
+                                </div>
+                                <div style="text-align: right;">
+                                    <p style="font-size: 11px; color: #9a3412; font-weight: 600;">PEAK DEMAND</p>
+                                    <p style="font-size: 24px; font-weight: 700; color: #ea580c; margin-top: 4px;" id="peakDemand">--</p>
+                                </div>
+                            </div>
+                            <p style="font-size: 11px; color: #9a3412; margin-top: 8px; text-align: center;">
+                                <i class="fas fa-info-circle"></i> Plan your shift around peak demand times for maximum earnings
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- All Zones View -->
+                <div id="allZonesSection" class="hidden card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div class="card-header" style="margin: 0;">
+                            <i class="fas fa-list text-purple-600"></i>
+                            All 30 Zones Demand
+                        </div>
+                        <button id="closeAllZonesBtn" class="text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2" style="max-height: calc(100vh - 200px); overflow-y: auto;" id="allZonesGrid">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let map, markers = [];
+        let allRegions = [];
+        let selectedRegion = null;
+        let trendChart = null;
+        let heatmapLayer = null;
+        let heatmapVisible = false;
+        let routingControl = null;
+        let regionBoundaryLayers = [];
+        let lastPredictionData = null;  // Store last prediction for heatmap/routing
+
+        // Initialize map
+        function initMap() {
+            map = L.map('map').setView([40.7580, -73.9855], 11);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        // Load regions
+        async function loadRegions() {
+            try {
+                const response = await fetch('/get_regions');
+                const data = await response.json();
+                if (data.success) {
+                    allRegions = data.regions;
+                    populateZoneDropdown();
+                    addMarkersToMap();
+                }
+            } catch (error) {
+                console.error('Error loading regions:', error);
+            }
+        }
+
+        // Populate zone dropdown
+        function populateZoneDropdown() {
+            const select = document.getElementById('zoneSelect');
+            Object.entries(allRegions).forEach(([id, region]) => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = region.name;
+                select.appendChild(option);
+            });
+        }
+
+        // Add centroid markers to map (before prediction)
+        function addMarkersToMap() {
+            Object.entries(allRegions).forEach(([id, region]) => {
+                const marker = L.circleMarker([region.lat, region.lon], {
+                    radius: 8,
+                    fillColor: '#667eea',
+                    color: '#fff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.7
+                }).addTo(map);
+                
+                marker.bindPopup(`<b>${region.name}</b><br>Zone ID: ${id}<br>Click to select`);
+                marker.on('click', () => selectZone(id));
+                markers.push(marker);
+            });
+        }
+        
+        // Add scatter points to map (after prediction)
+        async function showScatterPoints() {
+            try {
+                const response = await fetch('/get_scatter_points');
+                const data = await response.json();
+                
+                if (data.success) {
+                    data.points.forEach(point => {
+                        const dot = L.circleMarker([point.lat, point.lon], {
+                            radius: 3,
+                            fillColor: point.color,
+                            color: point.color,
+                            weight: 1,
+                            opacity: 0.6,
+                            fillOpacity: 0.6
+                        }).addTo(map);
+                        markers.push(dot);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading scatter points:', error);
+            }
+        }
+
+        // ===== HEATMAP FUNCTIONS =====
+        
+        // Toggle heatmap visibility
+        function toggleHeatmap() {
+            const btn = document.getElementById('heatmapToggle');
+            if (!lastPredictionData) {
+                alert('Please make a prediction first to see the demand heatmap');
+                return;
+            }
+            
+            heatmapVisible = !heatmapVisible;
+            
+            if (heatmapVisible) {
+                showHeatmap(lastPredictionData.all_regions);
+                btn.classList.add('active');
+            } else {
+                hideHeatmap();
+                btn.classList.remove('active');
+            }
+        }
+        
+        // Show demand heatmap layer
+        function showHeatmap(allRegionsData) {
+            hideHeatmap();
+            
+            if (!allRegionsData || allRegionsData.length === 0) return;
+            
+            // Find max demand for normalization
+            const maxDemand = Math.max(...allRegionsData.map(r => r.predicted_demand));
+            
+            // Create heatmap data points [lat, lng, intensity]
+            // Add multiple points around each centroid for better coverage
+            const heatData = [];
+            allRegionsData.forEach(region => {
+                const intensity = region.predicted_demand / maxDemand;
+                // Central point (strongest)
+                heatData.push([region.lat, region.lon, intensity]);
+                // Surrounding points for spread
+                const spread = 0.008;
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i / 8) * 2 * Math.PI;
+                    heatData.push([
+                        region.lat + Math.sin(angle) * spread,
+                        region.lon + Math.cos(angle) * spread,
+                        intensity * 0.6
+                    ]);
+                }
+            });
+            
+            heatmapLayer = L.heatLayer(heatData, {
+                radius: 35,
+                blur: 25,
+                maxZoom: 15,
+                max: 1.0,
+                gradient: {
+                    0.0: '#313695',
+                    0.2: '#4575b4',
+                    0.4: '#74add1',
+                    0.5: '#fee090',
+                    0.6: '#fdae61',
+                    0.8: '#f46d43',
+                    1.0: '#a50026'
+                }
+            }).addTo(map);
+        }
+        
+        // Hide heatmap layer
+        function hideHeatmap() {
+            if (heatmapLayer) {
+                map.removeLayer(heatmapLayer);
+                heatmapLayer = null;
+            }
+        }
+        
+        // ===== ROUTING FUNCTIONS =====
+        
+        // Show route from current zone to target zone
+        function showRoute(fromRegionId, toRegionId) {
+            clearRoute();
+            
+            const fromRegion = allRegions[fromRegionId];
+            const toRegion = allRegions[toRegionId];
+            
+            if (!fromRegion || !toRegion) return;
+            
+            const fromLatLng = L.latLng(fromRegion.lat, fromRegion.lon);
+            const toLatLng = L.latLng(toRegion.lat, toRegion.lon);
+            
+            routingControl = L.Routing.control({
+                waypoints: [fromLatLng, toLatLng],
+                routeWhileDragging: false,
+                addWaypoints: false,
+                draggableWaypoints: false,
+                fitSelectedRoutes: true,
+                showAlternatives: false,
+                lineOptions: {
+                    styles: [
+                        { color: '#667eea', opacity: 0.8, weight: 6 },
+                        { color: '#764ba2', opacity: 0.4, weight: 10 }
+                    ]
+                },
+                createMarker: function(i, wp, nWps) {
+                    const isStart = i === 0;
+                    return L.marker(wp.latLng, {
+                        icon: L.divIcon({
+                            className: '',
+                            html: `<div style="background: ${isStart ? '#667eea' : '#10b981'}; color: white; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">
+                                        <i class="fas ${isStart ? 'fa-taxi' : 'fa-flag-checkered'}" style="font-size: 11px;"></i>
+                                    </div>`,
+                            iconSize: [28, 28],
+                            iconAnchor: [14, 14]
+                        })
+                    }).bindPopup(isStart ? `<b>From:</b> ${fromRegion.name}` : `<b>To:</b> ${toRegion.name}`);
+                }
+            }).addTo(map);
+            
+            // Listen for route found event to show info panel
+            routingControl.on('routesfound', function(e) {
+                const routes = e.routes;
+                if (routes && routes.length > 0) {
+                    const route = routes[0];
+                    const distKm = (route.summary.totalDistance / 1000).toFixed(1);
+                    const timeMin = Math.round(route.summary.totalTime / 60);
+                    
+                    document.getElementById('routeFromTo').textContent = 
+                        `${fromRegion.name.split(' - ')[0]} → ${toRegion.name.split(' - ')[0]}`;
+                    document.getElementById('routeDistance').textContent = `${distKm} km`;
+                    document.getElementById('routeTime').textContent = `${timeMin} min`;
+                    document.getElementById('routeInfoPanel').style.display = 'flex';
+                }
+            });
+            
+            routingControl.on('routingerror', function(e) {
+                console.warn('Routing error:', e.error);
+                // Show straight-line fallback info
+                const distKm = calculateStraightLineDistance(
+                    fromRegion.lat, fromRegion.lon, toRegion.lat, toRegion.lon
+                ).toFixed(1);
+                document.getElementById('routeFromTo').textContent = 
+                    `${fromRegion.name.split(' - ')[0]} → ${toRegion.name.split(' - ')[0]}`;
+                document.getElementById('routeDistance').textContent = `~${distKm} km (straight line)`;
+                document.getElementById('routeTime').textContent = 'N/A';
+                document.getElementById('routeInfoPanel').style.display = 'flex';
+            });
+        }
+        
+        // Clear routing from map
+        function clearRoute() {
+            if (routingControl) {
+                map.removeControl(routingControl);
+                routingControl = null;
+            }
+            document.getElementById('routeInfoPanel').style.display = 'none';
+        }
+        
+        // Haversine distance (straight line) for fallback
+        function calculateStraightLineDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+        
+        // ===== REGION HIGHLIGHTING FUNCTIONS =====
+        
+        // Highlight selected region boundary
+        function highlightRegion(regionId) {
+            clearRegionHighlights();
+            
+            const region = allRegions[regionId];
+            if (!region || !region.boundary) return;
+            
+            // Draw boundary polygon for selected region
+            const polygon = L.polygon(region.boundary, {
+                color: '#667eea',
+                weight: 3,
+                fillColor: '#667eea',
+                fillOpacity: 0.15,
+                dashArray: '5, 10'
+            }).addTo(map);
+            regionBoundaryLayers.push(polygon);
+        }
+        
+        // Highlight recommended zones with subtle boundaries
+        function highlightRecommendedZones(recommendations) {
+            if (!recommendations || recommendations.length === 0) return;
+            
+            recommendations.forEach(rec => {
+                const region = allRegions[rec.region_id];
+                if (region && region.boundary) {
+                    const polygon = L.polygon(region.boundary, {
+                        color: '#10b981',
+                        weight: 2,
+                        fillColor: '#10b981',
+                        fillOpacity: 0.08,
+                        dashArray: '3, 8'
+                    }).addTo(map);
+                    regionBoundaryLayers.push(polygon);
+                }
+            });
+        }
+        
+        // Clear all region highlights
+        function clearRegionHighlights() {
+            regionBoundaryLayers.forEach(layer => map.removeLayer(layer));
+            regionBoundaryLayers = [];
+        }
+
+        // Select zone
+        function selectZone(zoneId) {
+            selectedRegion = zoneId;
+            const region = allRegions[zoneId];
+            
+            document.getElementById('zoneSelect').value = zoneId;
+            document.getElementById('selectedZoneInfo').classList.remove('hidden');
+            document.getElementById('selectedZoneName').textContent = region.name;
+            document.getElementById('selectedZoneId').textContent = zoneId;
+            
+            checkPredictButton();
+        }
+
+        // Check if predict button should be enabled
+        function checkPredictButton() {
+            const zone = document.getElementById('zoneSelect').value;
+            const date = document.getElementById('datePicker').value;
+            const time = document.getElementById('timePicker').value;
+            
+            document.getElementById('predictBtn').disabled = !(zone && date && time);
+        }
+
+        // Set time
+        function setTime(time) {
+            document.getElementById('timePicker').value = time;
+            checkPredictButton();
+        }
+
+        // Load available times
+        async function loadAvailableTimes() {
+            const date = document.getElementById('datePicker').value;
+            if (!date) return;
+            
+            try {
+                const response = await fetch('/get_available_times', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({date})
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    const select = document.getElementById('timePicker');
+                    select.innerHTML = '<option value="">-- Select Time --</option>';
+                    data.times.forEach(time => {
+                        const option = document.createElement('option');
+                        option.value = time;
+                        option.textContent = time;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading times:', error);
+            }
+        }
+
+        // Make prediction
+        async function makePrediction() {
+            const region_id = document.getElementById('zoneSelect').value;
+            const date = document.getElementById('datePicker').value;
+            const time = document.getElementById('timePicker').value;
+            
+            if (!region_id || !date || !time) {
+                alert('Please select zone, date, and time');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({region_id, date, time})
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data);
+                } else {
+                    alert(data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error making prediction');
+            }
+        }
+
+        // Display results
+        function displayResults(data) {
+            // Store prediction data for heatmap/routing
+            lastPredictionData = data;
+            
+            document.getElementById('resultsSection').classList.remove('hidden');
+            document.getElementById('mainPredictionCard').classList.remove('hidden');
+            document.getElementById('analyticsRow').classList.remove('hidden');
+            document.getElementById('allZonesSection').classList.add('hidden');
+            
+            // Main prediction
+            document.getElementById('predictedValue').textContent = data.prediction.predicted_demand;
+            document.getElementById('nextInterval').textContent = data.prediction.next_interval;
+            document.getElementById('confidenceLevel').textContent = data.prediction.confidence;
+            document.getElementById('trendIcon').textContent = data.features.trend_icon;
+            
+            // Accuracy
+            document.getElementById('predictedDemand').textContent = data.prediction.predicted_demand;
+            document.getElementById('actualDemand').textContent = data.prediction.actual_demand;
+            document.getElementById('errorValue').textContent = `±${data.prediction.error} (${data.prediction.error_percent}%)`;
+            
+            // Features
+            document.getElementById('dayOfWeek').textContent = data.features.day_of_week;
+            document.getElementById('avgPickups').textContent = data.features.avg_pickups + ' pickups';
+            document.getElementById('trendStatus').textContent = data.features.trend.charAt(0).toUpperCase() + data.features.trend.slice(1);
+            document.getElementById('zoneInfo').textContent = data.region_name;
+            
+            // Update ALL map markers with demand-based colors
+            updateMapWithDemand(data.all_regions, data.region_id);
+            
+            // Show Top 5 High Demand Zones
+            const topZonesList = document.getElementById('topZonesList');
+            topZonesList.innerHTML = '';
+            data.top_zones.forEach((zone, index) => {
+                const div = document.createElement('div');
+                div.style.cssText = `display: flex; justify-content: space-between; align-items: center; padding: 8px; border-radius: 4px; border: 1px solid ${zone.color}; background: ${zone.is_selected ? zone.color + '20' : 'white'}; cursor: pointer;`;
+                div.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 16px; font-weight: 700; color: #9ca3af;">#${index + 1}</span>
+                        <div>
+                            <p style="font-size: 12px; font-weight: 600; color: #111827;">${zone.name}</p>
+                            <p style="font-size: 10px; color: #6b7280;">Zone ${zone.region_id}</p>
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <p style="font-size: 18px; font-weight: 700; color: ${zone.color};">${zone.predicted_demand}</p>
+                        <p style="font-size: 10px; color: #6b7280;">pickups</p>
+                    </div>
+                `;
+                div.onclick = () => {
+                    selectZone(zone.region_id);
+                    makePrediction();
+                };
+                topZonesList.appendChild(div);
+            });
+            
+            // Show Recommendations for Driver
+            const recommendationsList = document.getElementById('recommendationsList');
+            recommendationsList.innerHTML = '';
+            
+            if (data.recommendations && data.recommendations.length > 0) {
+                data.recommendations.forEach((zone, index) => {
+                    const currentDemand = data.prediction.predicted_demand;
+                    const diffDemand = zone.predicted_demand - currentDemand;
+                    let diffPercent = Math.round((diffDemand / currentDemand) * 100);
+                    
+                    // Cap percentage at 100% for professional display
+                    let displayPercent = diffPercent > 100 ? '100%+' : (diffPercent > 0 ? '+' : '') + diffPercent + '%';
+                    
+                    const div = document.createElement('div');
+                    div.style.cssText = 'padding: 8px; background: linear-gradient(to right, #f0fdf4, #dbeafe); border-radius: 4px; border: 1px solid #86efac; cursor: pointer;';
+                    div.innerHTML = `
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <p style="font-size: 12px; font-weight: 600; color: #111827;">${zone.name}</p>
+                            <span style="background: #10b981; color: white; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 2px;">${displayPercent}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px;">
+                            <span style="color: #6b7280;">Expected:</span>
+                            <span style="font-size: 16px; font-weight: 700; color: ${zone.color};">${zone.predicted_demand}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
+                            <p style="font-size: 10px; color: #6b7280;">
+                                <i class="fas fa-map-marker-alt" style="font-size: 8px;"></i> ${zone.distance_km.toFixed(1)} km away • ${diffDemand} more pickups
+                            </p>
+                            <button class="show-route-btn" 
+                                style="background: #667eea; color: white; border: none; border-radius: 3px; padding: 2px 8px; font-size: 10px; font-weight: 600; cursor: pointer;"
+                                onclick="event.stopPropagation(); showRoute('${data.region_id}', '${zone.region_id}');">
+                                <i class="fas fa-directions"></i> Route
+                            </button>
+                        </div>
+                    `;
+                    div.onclick = () => {
+                        selectZone(zone.region_id);
+                        makePrediction();
+                    };
+                    recommendationsList.appendChild(div);
+                });
+            } else {
+                recommendationsList.innerHTML = '<p style="color: #6b7280; font-size: 12px;">No nearby zones with better demand found.</p>';
+            }
+            
+            // Recommendation
+            let recText = '';
+            if (data.prediction.predicted_demand > 80) {
+                recText = '🔥 High demand expected! Excellent time for drivers to be in this area.';
+            } else if (data.prediction.predicted_demand > 50) {
+                recText = '✅ Moderate demand. Good opportunity for pickups in this zone.';
+            } else {
+                recText = '⚠️ Low demand. Check the "Where to Move Next" section for better zones.';
+            }
+            document.getElementById('recommendationText').textContent = recText;
+            
+            // Update peak hours
+            document.getElementById('peakTime').textContent = data.peak_hours.time;
+            document.getElementById('peakDemand').textContent = data.peak_hours.demand;
+            
+            // Update chart
+            updateTrendChart(data.features.lag_values, data.time_labels);
+        }
+
+        // Update map markers with demand-based colors (show scatter after prediction)
+        async function updateMapWithDemand(allRegionsData, selectedRegionId) {
+            // Clear existing markers, route, and highlights
+            markers.forEach(marker => map.removeLayer(marker));
+            markers = [];
+            clearRoute();
+            clearRegionHighlights();
+            
+            // Load and show scatter points
+            await showScatterPoints();
+            
+            // Highlight selected region boundary
+            highlightRegion(selectedRegionId);
+            
+            // Highlight recommended zones if available
+            if (lastPredictionData && lastPredictionData.recommendations) {
+                highlightRecommendedZones(lastPredictionData.recommendations);
+            }
+            
+            // Update heatmap if it's currently visible
+            if (heatmapVisible) {
+                showHeatmap(allRegionsData);
+            }
+            
+            // Add selected zone marker
+            const selectedRegionData = allRegionsData.find(r => r.region_id === selectedRegionId);
+            if (selectedRegionData) {
+                // Zoom to selected region
+                map.flyTo([selectedRegionData.lat, selectedRegionData.lon], 13, {
+                    duration: 1.5
+                });
+                
+                const marker = L.circleMarker([selectedRegionData.lat, selectedRegionData.lon], {
+                    radius: 12,
+                    fillColor: selectedRegionData.color,
+                    color: '#000',
+                    weight: 3,
+                    opacity: 1,
+                    fillOpacity: 1
+                }).addTo(map);
+                
+                marker.bindPopup(`
+                    <div class="text-center">
+                        <b>${selectedRegionData.name}</b><br>
+                        <span style="color: ${selectedRegionData.color}; font-size: 20px; font-weight: bold;">${selectedRegionData.predicted_demand}</span> pickups<br>
+                        <span class="text-xs bg-purple-100 px-2 py-1 rounded">Selected Zone</span>
+                    </div>
+                `);
+                markers.push(marker);
+            }
+        }
+
+        // Update trend chart
+        function updateTrendChart(lagValues, labels) {
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            
+            if (trendChart) {
+                trendChart.destroy();
+            }
+            
+            trendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Demand (pickups)',
+                        data: lagValues.reverse(),
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 6,
+                        pointHoverRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {display: false},
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 12,
+                            titleFont: {size: 14, weight: 'bold'},
+                            bodyFont: {size: 13}
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {display: true, text: 'Pickups', font: {weight: 'bold'}}
+                        },
+                        x: {
+                            title: {display: true, text: 'Time', font: {weight: 'bold'}}
+                        }
+                    }
+                }
+            });
+        }
+
+        // View all zones
+        async function viewAllZones() {
+            const date = document.getElementById('datePicker').value;
+            const time = document.getElementById('timePicker').value;
+            
+            if (!date || !time) {
+                alert('Please select date and time first');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/predict_all_regions', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({date, time})
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayAllZones(data.regions);
+                } else {
+                    alert(data.error);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error loading all zones');
+            }
+        }
+
+        // Display all zones
+        function displayAllZones(regions) {
+            document.getElementById('resultsSection').classList.add('hidden');
+            document.getElementById('allZonesSection').classList.remove('hidden');
+            
+            const grid = document.getElementById('allZonesGrid');
+            grid.innerHTML = '';
+            
+            regions.sort((a, b) => b.predicted_demand - a.predicted_demand);
+            
+            regions.forEach((region, index) => {
+                const card = document.createElement('div');
+                card.className = 'bg-white border-2 rounded-lg p-4 hover:shadow-lg transition cursor-pointer';
+                card.style.borderColor = region.color;
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="font-semibold text-xs text-gray-600">#${index + 1}</span>
+                        <span class="text-2xl font-bold" style="color: ${region.color}">${region.predicted_demand}</span>
+                    </div>
+                    <h4 class="font-semibold text-sm text-gray-900 mb-1">${region.name}</h4>
+                    <p class="text-xs text-gray-600">Actual: ${region.actual_demand}</p>
+                `;
+                card.onclick = () => {
+                    selectZone(region.region_id);
+                    document.getElementById('allZonesSection').classList.add('hidden');
+                    makePrediction();
+                };
+                grid.appendChild(card);
+            });
+            
+            document.getElementById('allZonesSection').scrollIntoView({behavior: 'smooth'});
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            loadRegions();
+            loadAvailableTimes();
+            
+            document.getElementById('zoneSelect').addEventListener('change', (e) => {
+                if (e.target.value) selectZone(e.target.value);
+                checkPredictButton();
+            });
+            
+            document.getElementById('datePicker').addEventListener('change', () => {
+                loadAvailableTimes();
+                checkPredictButton();
+            });
+            
+            document.getElementById('timePicker').addEventListener('change', checkPredictButton);
+            document.getElementById('predictBtn').addEventListener('click', makePrediction);
+            document.getElementById('viewAllBtn').addEventListener('click', viewAllZones);
+            document.getElementById('closeAllZonesBtn').addEventListener('click', () => {
+                document.getElementById('allZonesSection').classList.add('hidden');
+            });
+        });
+    </script>
+</body>
+</html>
